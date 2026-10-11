@@ -1,71 +1,70 @@
+import 'dotenv/config'
+import http from 'node:http'
+import mongoose from 'mongoose'
+import { Server } from 'socket.io'
+import app from './app.js'
 
-import "dotenv/config";
-import http from "node:http";
-import express from "express";
-import cors from "cors";
-import helmet from "helmet";
-import mongoose from "mongoose";
-import { Server } from "socket.io";
+const httpServer = http.createServer(app)
 
-const app = express();
-const httpServer = http.createServer(app);
-
-const allowedOrigin =
-  process.env.CLIENT_URL || "http://localhost:5173";
-
-app.use(helmet());
-
-app.use(
-  cors({
-    origin: allowedOrigin,
-    credentials: true,
-  })
-);
-
-app.use(express.json({ limit: "1mb" }));
-
-app.get("/api/health", (_req, res) => {
-  res.json({
-    ok: true,
-    service: "ChatWave API",
-  });
-});
+const allowedOrigins = (
+  process.env.CLIENT_URL || 'http://localhost:5173'
+)
+  .split(',')
+  .map((origin) => origin.trim())
+  .filter(Boolean)
 
 const io = new Server(httpServer, {
   cors: {
-    origin: allowedOrigin,
+    origin: allowedOrigins,
     credentials: true,
   },
-});
+})
 
-io.on("connection", (socket) => {
-  console.log("Socket connected:", socket.id);
+io.on('connection', (socket) => {
+  console.log('Socket connected:', socket.id)
 
-  socket.on("disconnect", () => {
-    console.log("Socket disconnected:", socket.id);
-  });
-});
+  socket.on('disconnect', (reason) => {
+    console.log('Socket disconnected:', reason)
+  })
+})
 
-const port = Number(process.env.PORT) || 5000;
+app.set('io', io)
+
+const port = Number(process.env.PORT) || 5000
 
 async function startServer() {
   try {
-    if (process.env.MONGODB_URI) {
-      await mongoose.connect(process.env.MONGODB_URI);
-      console.log("MongoDB connected");
-    } else {
-      console.warn(
-        "MONGODB_URI missing; database features are not ready."
-      );
+    if (!process.env.MONGODB_URI) {
+      throw new Error('MONGODB_URI is missing from backend/.env')
     }
 
-    httpServer.listen(port, "0.0.0.0", () => {
-      console.log(`ChatWave API running on port ${port}`);
-    });
+    await mongoose.connect(process.env.MONGODB_URI)
+    console.log('MongoDB connected')
+
+    httpServer.listen(port, '0.0.0.0', () => {
+      console.log(`ChatWave API running on port ${port}`)
+    })
   } catch (error) {
-    console.error("Failed to start ChatWave:", error.message);
-    process.exit(1);
+    console.error('Failed to start ChatWave:', error.message)
+    process.exit(1)
   }
 }
 
-startServer();
+async function shutdown(signal) {
+  console.log(`${signal} received. Shutting down ChatWave...`)
+
+  httpServer.close()
+
+  try {
+    await mongoose.disconnect()
+  } catch (error) {
+    console.error('Error disconnecting MongoDB:', error.message)
+  }
+
+  process.exit(0)
+}
+
+process.once('SIGINT', () => shutdown('SIGINT'))
+process.once('SIGTERM', () => shutdown('SIGTERM'))
+
+startServer()
