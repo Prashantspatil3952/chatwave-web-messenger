@@ -2,6 +2,9 @@ import jwt from 'jsonwebtoken'
 import User from '../models/User.js'
 import { getAuthCookieName } from '../utils/authToken.js'
 
+const SESSION_USER_FIELDS =
+  '_id userId displayName email isEmailVerified avatarUrl lastSeenAt'
+
 export async function requireAuth(req, res, next) {
   try {
     const secret = process.env.JWT_SECRET
@@ -42,6 +45,9 @@ export async function requireAuth(req, res, next) {
     }
 
     const user = await User.findById(payload.sub)
+      .select(SESSION_USER_FIELDS)
+      .lean()
+      .exec()
 
     if (!user) {
       return res.status(401).json({
@@ -50,7 +56,7 @@ export async function requireAuth(req, res, next) {
     }
 
     req.user = user
-    next()
+    return next()
   } catch (error) {
     if (
       error.name === 'JsonWebTokenError' ||
@@ -62,6 +68,6 @@ export async function requireAuth(req, res, next) {
       })
     }
 
-    next(error)
+    return next(error)
   }
 }

@@ -1,13 +1,9 @@
-
 import jwt from 'jsonwebtoken'
 
 const COOKIE_NAME = 'chatwave_token'
 const SESSION_TOKEN_LIFETIME = '1d'
-const REMEMBERED_TOKEN_LIFETIME = '30d'
-const SESSION_COOKIE_MAX_AGE = undefined
-const REMEMBERED_COOKIE_MAX_AGE = 30 * 24 * 60 * 60 * 1000
 
-export function createAuthToken(user, rememberMe = false) {
+export function createAuthToken(user) {
   const secret = process.env.JWT_SECRET
 
   if (!secret) {
@@ -21,9 +17,7 @@ export function createAuthToken(user, rememberMe = false) {
     },
     secret,
     {
-      expiresIn: rememberMe
-        ? REMEMBERED_TOKEN_LIFETIME
-        : SESSION_TOKEN_LIFETIME,
+      expiresIn: SESSION_TOKEN_LIFETIME,
       issuer: 'chatwave',
       audience: 'chatwave-web',
     },
@@ -34,21 +28,15 @@ export function getAuthCookieName() {
   return COOKIE_NAME
 }
 
-export function getAuthCookieOptions(rememberMe = false) {
+export function getAuthCookieOptions() {
   const production = process.env.NODE_ENV === 'production'
 
-  const options = {
+  return {
     httpOnly: true,
     secure: production,
     sameSite: production ? 'none' : 'lax',
     path: '/',
   }
-
-  if (rememberMe) {
-    options.maxAge = REMEMBERED_COOKIE_MAX_AGE
-  }
-
-  return options
 }
 
 export function getClearCookieOptions() {

@@ -18,7 +18,6 @@ const userSchema = new mongoose.Schema(
       minlength: 4,
       maxlength: 30,
       unique: true,
-      index: true,
     },
 
     email: {
@@ -27,7 +26,6 @@ const userSchema = new mongoose.Schema(
       trim: true,
       lowercase: true,
       unique: true,
-      index: true,
     },
 
     passwordHash: {

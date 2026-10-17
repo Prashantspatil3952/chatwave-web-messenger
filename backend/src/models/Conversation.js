@@ -7,14 +7,8 @@ const conversationUserSettingsSchema = new mongoose.Schema(
       ref: 'User',
       required: true,
     },
-    hidden: {
-      type: Boolean,
-      default: false,
-    },
-    clearedAt: {
-      type: Date,
-      default: null,
-    },
+    hidden: { type: Boolean, default: false },
+    clearedAt: { type: Date, default: null },
   },
   { _id: false },
 )
@@ -41,56 +35,37 @@ const conversationSchema = new mongoose.Schema(
         message: 'A conversation needs distinct participants.',
       },
     },
-
-    isGroup: {
-      type: Boolean,
-      default: false,
-    },
-
-    title: {
-      type: String,
-      trim: true,
-      maxlength: 80,
-      default: '',
-    },
-
+    isGroup: { type: Boolean, default: false },
+    title: { type: String, trim: true, maxlength: 80, default: '' },
     createdBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
       required: true,
     },
-
+    directKey: { type: String, trim: true },
     lastMessage: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Message',
       default: null,
     },
-
-    lastMessageText: {
-      type: String,
-      maxlength: 200,
-      default: '',
-    },
-
-    lastMessageAt: {
-      type: Date,
-      default: Date.now,
-    },
-
-    // Each participant controls their own history and hidden state.
-    userSettings: {
-      type: [conversationUserSettingsSchema],
-      default: [],
-    },
+    lastMessageText: { type: String, maxlength: 200, default: '' },
+    lastMessageAt: { type: Date, default: Date.now },
+    userSettings: { type: [conversationUserSettingsSchema], default: [] },
   },
-  {
-    timestamps: true,
-  },
+  { timestamps: true },
 )
 
 conversationSchema.index({ participants: 1, lastMessageAt: -1 })
 conversationSchema.index({ lastMessageAt: -1 })
 conversationSchema.index({ participants: 1, isGroup: 1 })
+conversationSchema.index(
+  { directKey: 1 },
+  {
+    unique: true,
+    sparse: true,
+    name: 'unique_direct_conversation_key',
+  },
+)
 
 const Conversation =
   mongoose.models.Conversation ||

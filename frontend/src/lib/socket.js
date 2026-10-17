@@ -14,8 +14,10 @@ export function getSocket() {
       autoConnect: false,
       withCredentials: true,
       reconnection: true,
-      reconnectionAttempts: 5,
-      reconnectionDelay: 1000,
+      reconnectionAttempts: Infinity,
+      reconnectionDelay: 750,
+      reconnectionDelayMax: 10000,
+      randomizationFactor: 0.5,
       timeout: 10000,
     })
   }
@@ -26,7 +28,7 @@ export function getSocket() {
 export function connectSocket() {
   const client = getSocket()
 
-  if (!client.connected) {
+  if (!client.connected && !client.active) {
     client.connect()
   }
 
@@ -34,9 +36,7 @@ export function connectSocket() {
 }
 
 export function disconnectSocket() {
-  if (socket) {
-    socket.disconnect()
-  }
+  if (socket) socket.disconnect()
 }
 
 export function isSocketConnected() {

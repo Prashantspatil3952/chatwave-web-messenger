@@ -1,6 +1,5 @@
-import { useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import './App.css'
-import Messenger from './Messenger.jsx'
 import {
   getCurrentUser,
   loginAccount,
@@ -10,6 +9,8 @@ import {
   requestRegistrationOtp,
   resetAccountPassword,
 } from './lib/auth.js'
+
+const Messenger = lazy(() => import('./Messenger.jsx'))
 
 function WaveMark() {
   return (
@@ -99,6 +100,7 @@ function App() {
   const [currentUser, setCurrentUser] = useState(null)
   const [notice, setNotice] = useState('')
   const [noticeType, setNoticeType] = useState('')
+  const sessionControllerRef = useRef(null)
 
   const [form, setForm] = useState({
     displayName: '',
@@ -111,20 +113,35 @@ function App() {
 
   useEffect(() => {
     let active = true
+    const controller = new AbortController()
+    sessionControllerRef.current = controller
 
-    getCurrentUser()
+    getCurrentUser({ signal: controller.signal })
       .then((result) => {
-        if (active) setCurrentUser(result.user)
+        if (active && result?.user) {
+          setCurrentUser(result.user)
+        }
       })
       .catch(() => {
-        // A visitor without a valid session sees the authentication form.
+        // Visitors without a valid session can use the form immediately.
       })
       .finally(() => {
-        if (active) setCheckingSession(false)
+        if (active) {
+          setCheckingSession(false)
+        }
+
+        if (sessionControllerRef.current === controller) {
+          sessionControllerRef.current = null
+        }
       })
 
     return () => {
       active = false
+      controller.abort()
+
+      if (sessionControllerRef.current === controller) {
+        sessionControllerRef.current = null
+      }
     }
   }, [])
 
@@ -143,6 +160,9 @@ function App() {
   }
 
   function changePage(nextPage) {
+    sessionControllerRef.current?.abort()
+    sessionControllerRef.current = null
+    setCheckingSession(false)
     setPage(nextPage)
     setOtpSent(false)
     setShowPassword(false)
@@ -161,6 +181,11 @@ function App() {
     event.preventDefault()
 
     if (loading) return
+
+    // Stop the background check before a new authentication request.
+    sessionControllerRef.current?.abort()
+    sessionControllerRef.current = null
+    setCheckingSession(false)
 
     setLoading(true)
     setNotice('')
@@ -276,6 +301,7 @@ function App() {
     setOtpSent(false)
     setNotice('')
     setNoticeType('')
+    setCheckingSession(false)
 
     setForm({
       displayName: '',
@@ -287,30 +313,27 @@ function App() {
     })
   }
 
-  if (checkingSession) {
-    return (
-      <main className="auth-shell">
-        <section className="form-panel">
-          <div className="form-wrap">
-            <div className="form-heading">
-              <span className="welcome-icon">
-                <Icon name="shield" size={23} />
-              </span>
-              <h2>Opening ChatWave</h2>
-              <p>Checking your session…</p>
-            </div>
-          </div>
-        </section>
-      </main>
-    )
-  }
-
   if (currentUser) {
     return (
-      <Messenger
-        currentUser={currentUser}
-        onLogout={handleLogout}
-      />
+      <Suspense
+        fallback={
+          <main className="auth-shell">
+            <section className="form-panel">
+              <div className="form-wrap">
+                <div className="form-heading">
+                  <span className="welcome-icon">
+                    <Icon name="shield" size={23} />
+                  </span>
+                  <h2>Opening ChatWave</h2>
+                  <p>Loading your conversations…</p>
+                </div>
+              </div>
+            </section>
+          </main>
+        }
+      >
+        <Messenger currentUser={currentUser} onLogout={handleLogout} />
+      </Suspense>
     )
   }
 
@@ -468,6 +491,12 @@ function App() {
             </div>
           )}
 
+          {checkingSession && (
+            <p className="field-hint" role="status">
+              Checking for an active session in the background. You can sign in now.
+            </p>
+          )}
+
           <form className="auth-form" onSubmit={handleSubmit}>
             {isRegister && (
               <>
@@ -551,7 +580,7 @@ function App() {
                     type={showPassword ? 'text' : 'password'}
                     placeholder={
                       isRegister
-                        ? 'Create a strong password'
+                        ? 'Create a password'
                         : 'Enter your password'
                     }
                     autoComplete={
@@ -559,7 +588,7 @@ function App() {
                     }
                     value={form.password}
                     onChange={updateField}
-                    minLength={8}
+                    minLength={6}
                     required
                   />
 
@@ -575,8 +604,7 @@ function App() {
 
                 {isRegister && (
                   <small className="field-hint">
-                    Use 8+ characters with uppercase, lowercase, a number,
-                    and a symbol.
+                    Use at least 6 characters.
                   </small>
                 )}
               </label>
@@ -594,7 +622,7 @@ function App() {
                     autoComplete="new-password"
                     value={form.newPassword}
                     onChange={updateField}
-                    minLength={8}
+                    minLength={6}
                     required
                   />
 
@@ -608,7 +636,7 @@ function App() {
                   </button>
                 </div>
                 <small className="field-hint">
-                  Use uppercase, lowercase, a number, and a symbol.
+                  Use at least 6 characters.
                 </small>
               </label>
             )}
@@ -639,10 +667,6 @@ function App() {
 
             {!isRegister && !isForgot && (
               <div className="form-options">
-                <label className="remember">
-                  <input type="checkbox" />
-                  <span>Remember me</span>
-                </label>
                 <button
                   type="button"
                   className="text-link"

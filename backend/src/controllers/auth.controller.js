@@ -1,9 +1,5 @@
-
 import User from '../models/User.js'
-import {
-  comparePassword,
-  hashPassword,
-} from '../utils/security.js'
+import { comparePassword, hashPassword } from '../utils/security.js'
 import {
   normalizeEmail,
   normalizeUserId,
@@ -25,14 +21,9 @@ function sendError(res, error, status = 400) {
   })
 }
 
-function setLoginCookie(res, user, rememberMe = false) {
-  const token = createAuthToken(user, rememberMe)
-
-  res.cookie(
-    getAuthCookieName(),
-    token,
-    getAuthCookieOptions(rememberMe),
-  )
+function setLoginCookie(res, user) {
+  const token = createAuthToken(user)
+  res.cookie(getAuthCookieName(), token, getAuthCookieOptions())
 }
 
 function publicUser(user) {
@@ -42,7 +33,12 @@ function publicUser(user) {
     displayName: user.displayName,
     email: user.email,
     isEmailVerified: user.isEmailVerified,
-    avatarUrl: user.avatarUrl,
+    avatarUrl: user.avatarUrl
+      ? /^https?:\/\//i.test(user.avatarUrl)
+        ? user.avatarUrl
+        : `/api/files/${String(user.avatarUrl).replace(/^\/api\/files\//, '')}`
+      : '',
+    lastSeenAt: user.lastSeenAt || null,
   }
 }
 
@@ -64,19 +60,16 @@ export async function requestRegistrationOtp(req, res, next) {
       })
     }
 
-    const result = await requestOtp(email, 'registration')
-
-    return res.status(200).json(result)
+    return res.status(200).json(await requestOtp(email, 'registration'))
   } catch (error) {
-    if (error.message?.includes('verification-code requests')) {
+    if (
+      error.message?.includes('verification-code requests') ||
+      error.message?.includes('wait ')
+    ) {
       return sendError(res, error, 429)
     }
 
-    if (error.message?.includes('wait ')) {
-      return sendError(res, error, 429)
-    }
-
-    next(error)
+    return next(error)
   }
 }
 
@@ -91,9 +84,7 @@ export async function register(req, res, next) {
     const { password, otp } = req.body || {}
 
     if (!email) {
-      return res.status(400).json({
-        message: 'Enter a valid email address.',
-      })
+      return res.status(400).json({ message: 'Enter a valid email address.' })
     }
 
     if (!userId) {
@@ -110,11 +101,8 @@ export async function register(req, res, next) {
     }
 
     const passwordCheck = validateRegistrationPassword(password)
-
     if (!passwordCheck.valid) {
-      return res.status(400).json({
-        message: passwordCheck.message,
-      })
+      return res.status(400).json({ message: passwordCheck.message })
     }
 
     if (!validateOtpInput(otp)) {
@@ -135,13 +123,11 @@ export async function register(req, res, next) {
 
     await verifyOtp(email, otp, 'registration')
 
-    const passwordHash = await hashPassword(password)
-
     const user = await User.create({
       displayName,
       userId,
       email,
-      passwordHash,
+      passwordHash: await hashPassword(password),
       isEmailVerified: true,
     })
 
@@ -165,7 +151,7 @@ export async function register(req, res, next) {
       return sendError(res, error, 400)
     }
 
-    next(error)
+    return next(error)
   }
 }
 
@@ -175,9 +161,7 @@ export async function login(req, res, next) {
       typeof req.body?.identity === 'string'
         ? req.body.identity.trim().toLowerCase()
         : ''
-
     const { password } = req.body || {}
-    const rememberMe = req.body?.rememberMe === true
 
     if (!identity || typeof password !== 'string' || !password) {
       return res.status(400).json({
@@ -185,16 +169,11 @@ export async function login(req, res, next) {
       })
     }
 
-    const isEmail = identity.includes('@')
-
     const user = await User.findOne(
-      isEmail ? { email: identity } : { userId: identity },
+      identity.includes('@') ? { email: identity } : { userId: identity },
     ).select('+passwordHash')
 
-    if (
-      !user ||
-      !(await comparePassword(password, user.passwordHash))
-    ) {
+    if (!user || !(await comparePassword(password, user.passwordHash))) {
       return res.status(401).json({
         message: 'Incorrect email/user ID or password.',
       })
@@ -206,32 +185,23 @@ export async function login(req, res, next) {
       })
     }
 
-    setLoginCookie(res, user, rememberMe)
-
+    setLoginCookie(res, user)
     return res.status(200).json({
       message: 'Login successful.',
       user: publicUser(user),
     })
   } catch (error) {
-    next(error)
+    return next(error)
   }
 }
 
 export async function logout(_req, res) {
-  res.clearCookie(
-    getAuthCookieName(),
-    getClearCookieOptions(),
-  )
-
-  return res.status(200).json({
-    message: 'You have been logged out.',
-  })
+  res.clearCookie(getAuthCookieName(), getClearCookieOptions())
+  return res.status(200).json({ message: 'You have been logged out.' })
 }
 
 export async function getCurrentUser(req, res) {
-  return res.status(200).json({
-    user: publicUser(req.user),
-  })
+  return res.status(200).json({ user: publicUser(req.user) })
 }
 
 export async function requestPasswordResetOtp(req, res, next) {
@@ -239,14 +209,12 @@ export async function requestPasswordResetOtp(req, res, next) {
     const email = normalizeEmail(req.body?.email)
 
     if (!email) {
-      return res.status(400).json({
-        message: 'Enter a valid email address.',
-      })
+      return res.status(400).json({ message: 'Enter a valid email address.' })
     }
 
     const user = await User.findOne({ email }).select('_id')
 
-    // Keep the same response whether or not the account exists.
+    // Do not reveal whether an account exists.
     if (user) {
       try {
         await requestOtp(email, 'password-reset')
@@ -257,9 +225,7 @@ export async function requestPasswordResetOtp(req, res, next) {
         ) {
           return sendError(res, error, 429)
         }
-
-        next(error)
-        return
+        return next(error)
       }
     }
 
@@ -268,7 +234,7 @@ export async function requestPasswordResetOtp(req, res, next) {
         'If an account exists for that email, a verification code will be sent.',
     })
   } catch (error) {
-    next(error)
+    return next(error)
   }
 }
 
@@ -278,17 +244,12 @@ export async function resetPassword(req, res, next) {
     const { otp, newPassword } = req.body || {}
 
     if (!email) {
-      return res.status(400).json({
-        message: 'Enter a valid email address.',
-      })
+      return res.status(400).json({ message: 'Enter a valid email address.' })
     }
 
     const passwordCheck = validateRegistrationPassword(newPassword)
-
     if (!passwordCheck.valid) {
-      return res.status(400).json({
-        message: passwordCheck.message,
-      })
+      return res.status(400).json({ message: passwordCheck.message })
     }
 
     if (!validateOtpInput(otp)) {
@@ -298,7 +259,6 @@ export async function resetPassword(req, res, next) {
     }
 
     const user = await User.findOne({ email })
-
     if (!user) {
       return res.status(400).json({
         message: 'The code is invalid or the request cannot be completed.',
@@ -306,7 +266,6 @@ export async function resetPassword(req, res, next) {
     }
 
     await verifyOtp(email, otp, 'password-reset')
-
     user.passwordHash = await hashPassword(newPassword)
     await user.save()
 
@@ -327,6 +286,6 @@ export async function resetPassword(req, res, next) {
       return sendError(res, error, 400)
     }
 
-    next(error)
+    return next(error)
   }
 }

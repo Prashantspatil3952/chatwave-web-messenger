@@ -10,6 +10,7 @@ import {
   resetPassword,
 } from '../controllers/auth.controller.js'
 import { requireAuth } from '../middleware/auth.middleware.js'
+import { updateProfile } from '../controllers/profile.controller.js'
 
 const router = Router()
 
@@ -50,12 +51,11 @@ router.post(
 )
 
 router.post('/register', register)
-
 router.post('/login', loginLimiter, login)
-
 router.post('/logout', logout)
 
 router.get('/me', requireAuth, getCurrentUser)
+router.patch('/profile', requireAuth, updateProfile)
 
 router.post(
   '/forgot-password/request-otp',

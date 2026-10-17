@@ -6,6 +6,7 @@ import cookieParser from 'cookie-parser'
 import authRoutes from './routes/auth.routes.js'
 import conversationRoutes from './routes/conversation.routes.js'
 import messageRoutes from './routes/message.routes.js'
+import fileRoutes from './routes/file.routes.js'
 
 const app = express()
 
@@ -17,7 +18,6 @@ const allowedOrigins = (
   .filter(Boolean)
 
 app.disable('x-powered-by')
-
 app.use(helmet())
 
 app.use(
@@ -52,7 +52,7 @@ app.get('/', (_req, res) => {
 })
 
 app.use('/api/auth', authRoutes)
-
+app.use('/api/files', fileRoutes)
 app.use('/api/conversations', conversationRoutes)
 
 app.use(
@@ -70,6 +70,12 @@ app.use((error, _req, res, _next) => {
   if (error.message === 'Origin not allowed by CORS') {
     return res.status(403).json({
       message: 'This origin is not allowed.',
+    })
+  }
+
+  if (error?.type === 'entity.too.large' || error?.status === 413) {
+    return res.status(413).json({
+      message: 'The uploaded file or request is too large.',
     })
   }
 

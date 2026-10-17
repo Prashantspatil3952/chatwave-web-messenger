@@ -1,0 +1,474 @@
+.feature-messenger-shell .feature-avatar-wrap {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.feature-messenger-shell .contact-avatar img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+  border-radius: inherit;
+}
+
+.feature-messenger-shell .feature-presence-dot {
+  position: absolute;
+  right: -1px;
+  bottom: 1px;
+  width: 10px;
+  height: 10px;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  background: #a0a3b4;
+}
+
+.feature-messenger-shell .feature-presence-dot.online {
+  background: #21b875;
+}
+
+.feature-messenger-shell .conversation-item {
+  position: relative;
+}
+
+.feature-messenger-shell .feature-unread-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  min-width: 21px;
+  height: 21px;
+  padding: 0 6px;
+  border-radius: 999px;
+  color: #fff;
+  background: #6158e8;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.feature-current-user {
+  gap: 7px;
+}
+
+.feature-profile-open {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.feature-profile-open strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+}
+
+.feature-profile-open small {
+  margin-top: 2px;
+  color: #85879f;
+  font-size: 10px;
+}
+
+.feature-header-actions {
+  display: flex;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.feature-composer {
+  gap: 8px;
+}
+
+.feature-composer-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.feature-hidden-input {
+  display: none !important;
+}
+
+.feature-attach-button,
+.feature-mic-button {
+  flex: 0 0 auto;
+}
+
+.feature-mic-button.recording {
+  color: #fff;
+  background: #d73554;
+  border-color: #d73554;
+  animation: chatwave-pulse 1.3s ease-in-out infinite;
+}
+
+@keyframes chatwave-pulse {
+  50% {
+    box-shadow: 0 0 0 5px rgba(215, 53, 84, 0.15);
+  }
+}
+
+.feature-attachment-bubble {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  min-width: 120px;
+  max-width: min(320px, 65vw);
+}
+
+.feature-image-link {
+  display: block;
+  line-height: 0;
+}
+
+.feature-image-preview {
+  max-width: min(280px, 58vw);
+  max-height: 300px;
+  width: auto;
+  height: auto;
+  border-radius: 10px;
+  object-fit: contain;
+}
+
+.feature-audio-player {
+  width: min(280px, 64vw);
+  height: 40px;
+}
+
+.feature-attachment-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.feature-file-download {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: inherit;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.feature-file-loading,
+.feature-file-error {
+  display: block;
+  max-width: 260px;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+}
+
+.feature-file-error {
+  color: #be3650;
+}
+
+.feature-message-file {
+  padding: 8px 10px;
+  border-radius: 9px;
+  background: rgba(100, 95, 220, 0.07);
+}
+
+.feature-modal-backdrop,
+.feature-call-backdrop {
+  position: fixed;
+  z-index: 1000;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 18px;
+  background: rgba(22, 23, 42, 0.42);
+  backdrop-filter: blur(4px);
+}
+
+.feature-modal,
+.feature-incoming-call,
+.feature-call-window {
+  position: relative;
+  width: min(460px, 100%);
+  max-height: min(90vh, 780px);
+  overflow: auto;
+  padding: 28px;
+  border: 1px solid #e6e5f7;
+  border-radius: 22px;
+  background: #fff;
+  box-shadow: 0 24px 80px rgba(24, 22, 70, 0.22);
+  color: #1d2035;
+}
+
+.feature-modal h2,
+.feature-incoming-call h2,
+.feature-call-window h2 {
+  margin: 0 28px 7px 0;
+  font-size: 22px;
+}
+
+.feature-modal > p,
+.feature-incoming-call > p,
+.feature-call-window header p {
+  margin: 0 0 22px;
+  color: #7c8099;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.feature-modal-close {
+  position: absolute;
+  top: 13px;
+  right: 13px;
+  width: 34px;
+  height: 34px;
+  border: 1px solid #e7e6f3;
+  border-radius: 10px;
+  background: #fff;
+  color: #767991;
+  font-size: 24px;
+  cursor: pointer;
+}
+
+.feature-profile-avatar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin: 20px 0;
+}
+
+.feature-profile-avatar .contact-avatar {
+  width: 58px;
+  height: 58px;
+  font-size: 16px;
+}
+
+.feature-profile-avatar > div {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.feature-profile-avatar small {
+  color: #85879f;
+}
+
+.feature-profile-avatar .text-link {
+  align-self: flex-start;
+  border: 0;
+  padding: 2px 0;
+  background: none;
+  color: #6158e8;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.feature-field-label {
+  display: block;
+  margin-bottom: 7px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.feature-profile-input {
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 12px;
+  border: 1px solid #dfe0ed;
+  border-radius: 10px;
+  outline-color: #7770ee;
+}
+
+.feature-modal-submit {
+  width: 100%;
+  justify-content: center;
+  margin-top: 16px;
+}
+
+.feature-call-backdrop {
+  z-index: 1100;
+}
+
+.feature-incoming-call {
+  width: min(370px, 100%);
+  text-align: center;
+}
+
+.feature-call-avatar {
+  width: 74px !important;
+  height: 74px !important;
+  margin: 8px auto 18px;
+  border-radius: 26px !important;
+  font-size: 24px;
+}
+
+.feature-call-buttons {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  margin-top: 25px;
+}
+
+.feature-call-buttons button,
+.feature-call-controls button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 42px;
+  padding: 0 15px;
+  border: 1px solid #e5e5f1;
+  border-radius: 12px;
+  background: #f8f8fc;
+  color: #292b40;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.feature-call-buttons .feature-call-accept {
+  color: #fff;
+  background: #21a96b;
+  border-color: #21a96b;
+}
+
+.feature-call-buttons .feature-call-end,
+.feature-call-controls .feature-call-end {
+  color: #fff;
+  background: #d64258;
+  border-color: #d64258;
+}
+
+.feature-call-window {
+  width: min(700px, 100%);
+}
+
+.feature-call-window header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.feature-call-window header h2 {
+  margin-bottom: 5px;
+}
+
+.feature-call-window header p {
+  margin-bottom: 12px;
+}
+
+.feature-audio-stage {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 210px;
+  background: #f5f4ff;
+  border-radius: 16px;
+}
+
+.feature-video-stage {
+  position: relative;
+  overflow: hidden;
+  min-height: 280px;
+  border-radius: 16px;
+  background: #11121b;
+}
+
+.feature-remote-video {
+  display: block;
+  width: 100%;
+  height: min(55vh, 420px);
+  object-fit: contain;
+}
+
+.feature-local-video {
+  position: absolute;
+  right: 14px;
+  bottom: 14px;
+  width: min(140px, 27%);
+  max-height: 160px;
+  aspect-ratio: 3 / 4;
+  object-fit: cover;
+  border: 2px solid #fff;
+  border-radius: 12px;
+  background: #202230;
+}
+
+.feature-video-wait {
+  position: absolute;
+  top: 45%;
+  left: 0;
+  width: 100%;
+  padding: 12px;
+  color: #fff;
+  text-align: center;
+  pointer-events: none;
+}
+
+.feature-call-controls {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 9px;
+  margin-top: 18px;
+}
+
+.feature-call-controls button.active {
+  background: #eeeefe;
+  border-color: #6158e8;
+  color: #5750d5;
+}
+
+.feature-call-network-note {
+  margin: 14px 0 0;
+  color: #86899d;
+  text-align: center;
+  font-size: 11px;
+}
+
+@media (max-width: 700px) {
+  .feature-messenger-shell .feature-header-actions {
+    gap: 3px;
+  }
+
+  .feature-messenger-shell .feature-header-actions .icon-button {
+    width: 34px;
+    min-width: 34px;
+    height: 34px;
+  }
+
+  .feature-current-user {
+    gap: 5px;
+  }
+
+  .feature-profile-open small {
+    font-size: 9px;
+  }
+
+  .feature-composer-actions {
+    gap: 3px;
+  }
+
+  .feature-composer .composer-footer {
+    gap: 5px;
+  }
+
+  .feature-composer .composer-footer > span {
+    max-width: 45%;
+    font-size: 9px;
+  }
+
+  .feature-modal,
+  .feature-incoming-call,
+  .feature-call-window {
+    padding: 22px 18px;
+    border-radius: 18px;
+  }
+
+  .feature-video-stage {
+    min-height: 220px;
+  }
+}

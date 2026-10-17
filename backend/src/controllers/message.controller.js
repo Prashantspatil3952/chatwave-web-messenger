@@ -1,13 +1,22 @@
+import mongoose from 'mongoose'
 import Conversation from '../models/Conversation.js'
 import Message from '../models/Message.js'
 import { isValidObjectId } from '../utils/validateObjectId.js'
 
-const SENDER_FIELDS = 'displayName userId avatarUrl'
+const SENDER_FIELDS = 'displayName userId avatarUrl lastSeenAt'
 
 function findSettings(conversation, userId) {
   return (conversation.userSettings || []).find(
     (item) => String(item.user) === String(userId),
   )
+}
+
+function messagePreview(message) {
+  if (!message) return ''
+  if (message.type === 'image') return 'Photo'
+  if (message.type === 'audio') return 'Voice message'
+  if (message.type === 'file') return message.attachment?.name || 'File'
+  return message.text || ''
 }
 
 function reopenForParticipants(conversation) {
@@ -22,9 +31,7 @@ function reopenForParticipants(conversation) {
       settings = findSettings(conversation, participantId)
     }
 
-    if (settings) {
-      settings.hidden = false
-    }
+    if (settings) settings.hidden = false
   }
 }
 
@@ -48,6 +55,10 @@ async function findParticipantConversation(conversationId, userId) {
     _id: conversationId,
     participants: userId,
   })
+    .select(
+      '_id participants userSettings lastMessage lastMessageText lastMessageAt createdAt',
+    )
+    .exec()
 }
 
 // GET /api/conversations/:conversationId/messages
@@ -69,13 +80,11 @@ export async function listMessages(req, res, next) {
       ? Math.min(Math.max(requestedLimit, 1), 60)
       : 40
 
+    const settings = findSettings(conversation, req.user._id)
     const query = {
       conversation: conversation._id,
       deletedAt: null,
     }
-
-    // Hide cleared messages from this user without deleting another user's copy.
-    const settings = findSettings(conversation, req.user._id)
 
     if (settings?.clearedAt) {
       query.createdAt = { $gt: settings.clearedAt }
@@ -116,16 +125,14 @@ export async function listMessages(req, res, next) {
       ]
 
       if (settings?.clearedAt) {
-        query.$and = [
-          { createdAt: { $gt: settings.clearedAt } },
-        ]
+        query.$and = [{ createdAt: { $gt: settings.clearedAt } }]
         delete query.createdAt
       }
     }
 
     const messages = await Message.find(query)
       .select(
-        '_id conversation sender text deliveredTo readBy editedAt deletedAt createdAt updatedAt',
+        '_id conversation sender type text attachment deliveredTo readBy editedAt deletedAt createdAt updatedAt',
       )
       .sort({ createdAt: -1, _id: -1 })
       .limit(limit)
@@ -182,16 +189,16 @@ export async function sendMessage(req, res, next) {
     const message = await Message.create({
       conversation: conversation._id,
       sender: req.user._id,
+      type: 'text',
       text,
       deliveredTo: [],
       readBy: [req.user._id],
     })
 
-    // Sending a new message makes a previously closed chat visible again.
     reopenForParticipants(conversation)
 
     conversation.lastMessage = message._id
-    conversation.lastMessageText = text.slice(0, 200)
+    conversation.lastMessageText = messagePreview(message).slice(0, 200)
     conversation.lastMessageAt = message.createdAt
 
     await conversation.save()
@@ -256,17 +263,21 @@ export async function editMessage(req, res, next) {
       })
     }
 
-    // Only the original sender can edit a message.
+    // Accept legacy text messages that were created before type was added.
     const message = await Message.findOne({
       _id: messageId,
       conversation: conversation._id,
       sender: req.user._id,
+      $or: [
+        { type: 'text' },
+        { type: { $exists: false } },
+      ],
       deletedAt: null,
     })
 
     if (!message) {
       return res.status(404).json({
-        message: 'Message not found or you cannot edit it.',
+        message: 'Text message not found or you cannot edit it.',
       })
     }
 
@@ -318,7 +329,6 @@ export async function deleteMessage(req, res, next) {
       })
     }
 
-    // Only the original sender can delete a message.
     const message = await Message.findOne({
       _id: messageId,
       conversation: conversation._id,
@@ -335,6 +345,22 @@ export async function deleteMessage(req, res, next) {
     message.deletedAt = new Date()
     await message.save()
 
+    // Delete stored bytes after marking the message inaccessible.
+    if (message.attachment?.fileId && mongoose.connection.db) {
+      try {
+        const bucket = new mongoose.mongo.GridFSBucket(
+          mongoose.connection.db,
+          { bucketName: 'chatwaveFiles' },
+        )
+        await bucket.delete(message.attachment.fileId)
+      } catch (storageError) {
+        console.error(
+          'Could not remove deleted message attachment:',
+          storageError.message,
+        )
+      }
+    }
+
     if (String(conversation.lastMessage) === String(message._id)) {
       const previousMessage = await Message.findOne({
         conversation: conversation._id,
@@ -342,8 +368,10 @@ export async function deleteMessage(req, res, next) {
       }).sort({ createdAt: -1, _id: -1 })
 
       conversation.lastMessage = previousMessage?._id || null
-      conversation.lastMessageText =
-        previousMessage?.text.slice(0, 200) || ''
+      conversation.lastMessageText = messagePreview(previousMessage).slice(
+        0,
+        200,
+      )
       conversation.lastMessageAt =
         previousMessage?.createdAt || conversation.createdAt
 
