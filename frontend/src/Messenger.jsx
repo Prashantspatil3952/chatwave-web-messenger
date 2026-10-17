@@ -1,7 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import './Messenger.css'
+import { connectSocket, disconnectSocket, getSocket } from './lib/socket.js'
 import {
+  clearConversationHistory,
+  closeConversation,
   createConversation,
+  deleteMessage,
+  editMessage,
   getConversations,
   getMessages,
   sendMessage,
@@ -27,7 +32,6 @@ function getTime(value) {
   if (!value) return ''
 
   const date = new Date(value)
-
   if (Number.isNaN(date.getTime())) return ''
 
   return date.toLocaleTimeString([], {
@@ -54,6 +58,19 @@ function getConversationSubtitle(conversation) {
     conversation.lastMessage?.text ||
     'Start a conversation'
   )
+}
+
+function sortConversations(items) {
+  return [...items].sort((left, right) => {
+    const leftTime = new Date(
+      left.lastMessageAt || left.updatedAt || 0,
+    ).getTime()
+    const rightTime = new Date(
+      right.lastMessageAt || right.updatedAt || 0,
+    ).getTime()
+
+    return rightTime - leftTime
+  })
 }
 
 function Icon({ name, size = 20 }) {
@@ -120,6 +137,22 @@ function Icon({ name, size = 20 }) {
     )
   }
 
+  if (name === 'close') {
+    return (
+      <svg {...common}>
+        <path d="m18 6-12 12M6 6l12 12" />
+      </svg>
+    )
+  }
+
+  if (name === 'trash') {
+    return (
+      <svg {...common}>
+        <path d="M3 6h18M8 6V4h8v2m-11 0 1 14h12l1-14M10 10v6m4-6v6" />
+      </svg>
+    )
+  }
+
   return (
     <svg {...common}>
       <circle cx="12" cy="12" r="9" />
@@ -131,6 +164,8 @@ export default function Messenger({ currentUser, onLogout }) {
   const currentUserId = getId(currentUser)
   const bottomRef = useRef(null)
   const composerRef = useRef(null)
+  const activeIdRef = useRef('')
+  const conversationsRef = useRef([])
 
   const [conversations, setConversations] = useState([])
   const [activeId, setActiveId] = useState('')
@@ -145,6 +180,14 @@ export default function Messenger({ currentUser, onLogout }) {
   const [working, setWorking] = useState(false)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
+
+  useEffect(() => {
+    activeIdRef.current = activeId
+  }, [activeId])
+
+  useEffect(() => {
+    conversationsRef.current = conversations
+  }, [conversations])
 
   const activeConversation = useMemo(
     () => conversations.find((item) => getId(item) === activeId) || null,
@@ -167,9 +210,7 @@ export default function Messenger({ currentUser, onLogout }) {
     })
   }, [conversations, currentUserId, search])
 
-  const loadConversations = useCallback(async (initial = false) => {
-    if (initial) setLoadingConversations(true)
-
+  const loadConversations = useCallback(async () => {
     try {
       const result = await getConversations()
       const items = Array.isArray(result.conversations)
@@ -177,23 +218,23 @@ export default function Messenger({ currentUser, onLogout }) {
         : []
 
       setConversations(items)
-
       setActiveId((currentId) => {
         if (currentId && items.some((item) => getId(item) === currentId)) {
           return currentId
         }
 
+        if (!currentId) return ''
         return items.length ? getId(items[0]) : ''
       })
 
       setError('')
+      return items
     } catch (requestError) {
       setError(
         requestError.message ||
           'Could not load conversations. Please try again.',
       )
-    } finally {
-      if (initial) setLoadingConversations(false)
+      return null
     }
   }, [])
 
@@ -201,11 +242,8 @@ export default function Messenger({ currentUser, onLogout }) {
     let cancelled = false
 
     async function initialLoad() {
-      setLoadingConversations(true)
-
       try {
         const result = await getConversations()
-
         if (cancelled) return
 
         const items = Array.isArray(result.conversations)
@@ -213,7 +251,11 @@ export default function Messenger({ currentUser, onLogout }) {
           : []
 
         setConversations(items)
-        setActiveId(items.length ? getId(items[0]) : '')
+
+        if (items.length) {
+          setLoadingMessages(true)
+          setActiveId(getId(items[0]))
+        }
       } catch (requestError) {
         if (!cancelled) {
           setError(
@@ -228,53 +270,19 @@ export default function Messenger({ currentUser, onLogout }) {
 
     initialLoad()
 
-    const refreshTimer = window.setInterval(() => {
-      if (!cancelled) {
-        getConversations()
-          .then((result) => {
-            if (cancelled) return
-
-            const items = Array.isArray(result.conversations)
-              ? result.conversations
-              : []
-
-            setConversations(items)
-            setActiveId((currentId) => {
-              if (
-                currentId &&
-                items.some((item) => getId(item) === currentId)
-              ) {
-                return currentId
-              }
-
-              return items.length ? getId(items[0]) : ''
-            })
-          })
-          .catch(() => {
-            // Keep the current screen visible if a background refresh fails.
-          })
-      }
-    }, 10000)
-
     return () => {
       cancelled = true
-      window.clearInterval(refreshTimer)
     }
   }, [])
 
   useEffect(() => {
-    if (!activeId) {
-      setMessages([])
-      setLoadingMessages(false)
-      return undefined
-    }
+    if (!activeId) return undefined
 
     let cancelled = false
-    setLoadingMessages(true)
 
     async function loadSelectedMessages() {
       try {
-        const result = await getMessages(activeId, { limit: 50 })
+        const result = await getMessages(activeId, { limit: 40 })
 
         if (!cancelled) {
           setMessages(Array.isArray(result.messages) ? result.messages : [])
@@ -294,21 +302,238 @@ export default function Messenger({ currentUser, onLogout }) {
 
     loadSelectedMessages()
 
-    const refreshTimer = window.setInterval(async () => {
-      try {
-        const result = await getMessages(activeId, { limit: 50 })
+    return () => {
+      cancelled = true
+    }
+  }, [activeId])
 
-        if (!cancelled) {
+  useEffect(() => {
+    const socket = getSocket()
+
+    function addMessageToConversationList(conversationId, message) {
+      const known = conversationsRef.current.some(
+        (item) => getId(item) === conversationId,
+      )
+
+      if (!known) {
+        void loadConversations()
+        return
+      }
+
+      setConversations((previous) =>
+        sortConversations(
+          previous.map((conversation) => {
+            if (getId(conversation) !== conversationId) return conversation
+
+            return {
+              ...conversation,
+              lastMessage: message,
+              lastMessageText: message.text || '',
+              lastMessageAt: message.createdAt || new Date().toISOString(),
+            }
+          }),
+        ),
+      )
+    }
+
+    function handleNewMessage(event) {
+      const message = event?.data
+      const conversationId = getId(
+        event?.conversationId || message?.conversation,
+      )
+
+      if (!message || !conversationId) return
+
+      const messageId = getId(message)
+      const senderId = getId(message.sender)
+
+      addMessageToConversationList(conversationId, message)
+
+      if (senderId !== currentUserId) {
+        socket.emit('message:delivered', {
+          conversationId,
+          messageId,
+        })
+      }
+
+      if (activeIdRef.current !== conversationId) return
+
+      setMessages((previous) => {
+        if (previous.some((item) => getId(item) === messageId)) {
+          return previous
+        }
+
+        return [...previous, message]
+      })
+
+      if (senderId !== currentUserId) {
+        socket.emit('conversation:seen', { conversationId })
+      }
+    }
+
+    function handleUpdatedMessage(event) {
+      const message = event?.data
+      const conversationId = getId(
+        event?.conversationId || message?.conversation,
+      )
+
+      if (!message || !conversationId) return
+
+      const latestConversation = conversationsRef.current.find(
+        (item) => getId(item) === conversationId,
+      )
+
+      if (getId(latestConversation?.lastMessage) === getId(message)) {
+        addMessageToConversationList(conversationId, message)
+      }
+
+      if (activeIdRef.current !== conversationId) return
+
+      setMessages((previous) =>
+        previous.map((item) =>
+          getId(item) === getId(message) ? message : item,
+        ),
+      )
+    }
+
+    function handleDeletedMessage(event) {
+      const conversationId = getId(event?.conversationId)
+      const messageId = getId(event?.messageId)
+
+      if (!messageId || !conversationId) return
+
+      if (activeIdRef.current === conversationId) {
+        setMessages((previous) =>
+          previous.filter((item) => getId(item) !== messageId),
+        )
+      }
+
+      void loadConversations()
+    }
+
+    function handleMessageStatus(event) {
+      const conversationId = getId(event?.conversationId)
+      const messageId = getId(event?.messageId)
+
+      if (!messageId || activeIdRef.current !== conversationId) return
+
+      setMessages((previous) =>
+        previous.map((item) =>
+          getId(item) === messageId
+            ? {
+                ...item,
+                deliveredTo: event.deliveredTo || item.deliveredTo || [],
+                readBy: event.readBy || item.readBy || [],
+              }
+            : item,
+        ),
+      )
+    }
+
+    function handleConversationClosed(event) {
+      const conversationId = getId(event?.conversationId)
+      if (!conversationId) return
+
+      setConversations((previous) =>
+        previous.filter((item) => getId(item) !== conversationId),
+      )
+
+      if (activeIdRef.current === conversationId) {
+        setActiveId('')
+        setMessages([])
+        setNotice('Conversation closed.')
+      }
+    }
+
+    function handleConversationCleared(event) {
+      const conversationId = getId(event?.conversationId)
+      if (!conversationId) return
+
+      if (activeIdRef.current === conversationId) {
+        setMessages([])
+        setNotice('History cleared for your account.')
+      }
+
+      setConversations((previous) =>
+        previous.map((conversation) =>
+          getId(conversation) === conversationId
+            ? {
+                ...conversation,
+                lastMessage: null,
+                lastMessageText: '',
+                lastMessageAt: null,
+              }
+            : conversation,
+        ),
+      )
+    }
+
+    async function refreshAfterReconnect() {
+      void loadConversations()
+      const conversationId = activeIdRef.current
+
+      if (!conversationId) return
+
+      socket.emit('conversation:join', { conversationId })
+      socket.emit('conversation:seen', { conversationId })
+
+      try {
+        const result = await getMessages(conversationId, { limit: 40 })
+
+        if (activeIdRef.current === conversationId) {
           setMessages(Array.isArray(result.messages) ? result.messages : [])
         }
       } catch {
-        // Avoid interrupting a conversation because of a temporary refresh error.
+        // A later user action can retry if the reconnect refresh fails.
       }
-    }, 4000)
+    }
+
+    socket.on('message:new', handleNewMessage)
+    socket.on('message:updated', handleUpdatedMessage)
+    socket.on('message:deleted', handleDeletedMessage)
+    socket.on('message:status', handleMessageStatus)
+    socket.on('conversation:closed', handleConversationClosed)
+    socket.on('conversation:cleared', handleConversationCleared)
+    socket.on('connect', refreshAfterReconnect)
+
+    if (!socket.connected) connectSocket()
 
     return () => {
-      cancelled = true
-      window.clearInterval(refreshTimer)
+      socket.off('message:new', handleNewMessage)
+      socket.off('message:updated', handleUpdatedMessage)
+      socket.off('message:deleted', handleDeletedMessage)
+      socket.off('message:status', handleMessageStatus)
+      socket.off('conversation:closed', handleConversationClosed)
+      socket.off('conversation:cleared', handleConversationCleared)
+      socket.off('connect', refreshAfterReconnect)
+      disconnectSocket()
+    }
+  }, [currentUserId, loadConversations])
+
+  useEffect(() => {
+    if (!activeId) return undefined
+
+    const socket = getSocket()
+    const conversationId = activeId
+
+    function joinActiveConversation() {
+      socket.emit('conversation:join', { conversationId })
+      socket.emit('conversation:seen', { conversationId })
+    }
+
+    if (socket.connected) {
+      joinActiveConversation()
+    } else {
+      socket.once('connect', joinActiveConversation)
+      connectSocket()
+    }
+
+    return () => {
+      socket.off('connect', joinActiveConversation)
+
+      if (socket.connected) {
+        socket.emit('conversation:leave', { conversationId })
+      }
     }
   }, [activeId])
 
@@ -320,7 +545,6 @@ export default function Messenger({ currentUser, onLogout }) {
     event.preventDefault()
 
     const userId = newUserId.trim()
-
     if (!userId || working) return
 
     setWorking(true)
@@ -335,9 +559,8 @@ export default function Messenger({ currentUser, onLogout }) {
         throw new Error('The server did not return a conversation.')
       }
 
-      await loadConversations(false)
+      await loadConversations()
 
-      // Include the just-created conversation in case the list refresh races.
       setConversations((items) => {
         const exists = items.some(
           (item) => getId(item) === getId(conversation),
@@ -346,6 +569,8 @@ export default function Messenger({ currentUser, onLogout }) {
         return exists ? items : [conversation, ...items]
       })
 
+      setMessages([])
+      setLoadingMessages(true)
       setActiveId(getId(conversation))
       setNewUserId('')
       setShowNewChat(false)
@@ -364,16 +589,16 @@ export default function Messenger({ currentUser, onLogout }) {
     event.preventDefault()
 
     const text = draft.trim()
-
     if (!activeId || !text || sending) return
 
+    const conversationId = activeId
     setSending(true)
     setError('')
 
     try {
-      const result = await sendMessage(activeId, text)
+      const result = await sendMessage(conversationId, text)
 
-      if (result.data) {
+      if (result.data && activeIdRef.current === conversationId) {
         setMessages((previous) => {
           if (previous.some((item) => getId(item) === getId(result.data))) {
             return previous
@@ -383,15 +608,150 @@ export default function Messenger({ currentUser, onLogout }) {
         })
       }
 
+      setConversations((previous) =>
+        sortConversations(
+          previous.map((conversation) =>
+            getId(conversation) === conversationId
+              ? {
+                  ...conversation,
+                  lastMessage: result.data || { text },
+                  lastMessageText: text.slice(0, 200),
+                  lastMessageAt:
+                    result.data?.createdAt || new Date().toISOString(),
+                }
+              : conversation,
+          ),
+        ),
+      )
+
       setDraft('')
       composerRef.current?.focus()
-      await loadConversations(false)
     } catch (requestError) {
-      setError(
-        requestError.message || 'Your message could not be sent.',
-      )
+      setError(requestError.message || 'Your message could not be sent.')
     } finally {
       setSending(false)
+    }
+  }
+
+  async function handleEditMessage(message) {
+    const nextText = window.prompt('Edit your message:', message.text || '')
+    if (nextText === null) return
+
+    const text = nextText.trim()
+
+    if (!text) {
+      setError('Message text cannot be empty.')
+      return
+    }
+
+    if (text.length > 4000) {
+      setError('Messages cannot exceed 4000 characters.')
+      return
+    }
+
+    setError('')
+
+    try {
+      const result = await editMessage(activeId, getId(message), text)
+
+      if (result.data) {
+        setMessages((previous) =>
+          previous.map((item) =>
+            getId(item) === getId(result.data) ? result.data : item,
+          ),
+        )
+      }
+
+      setNotice('Message updated.')
+    } catch (requestError) {
+      setError(requestError.message || 'Could not edit this message.')
+    }
+  }
+
+  async function handleDeleteMessage(message) {
+    if (!window.confirm('Delete this message?')) return
+
+    const conversationId = activeId
+    setError('')
+
+    try {
+      await deleteMessage(conversationId, getId(message))
+
+      setMessages((previous) =>
+        previous.filter((item) => getId(item) !== getId(message)),
+      )
+
+      setNotice('Message deleted.')
+    } catch (requestError) {
+      setError(requestError.message || 'Could not delete this message.')
+    }
+  }
+
+  async function handleClearHistory() {
+    if (!activeId) return
+
+    const confirmed = window.confirm(
+      'Clear the messages from your view? This will not erase the other person’s history.',
+    )
+
+    if (!confirmed) return
+
+    const conversationId = activeId
+    setWorking(true)
+    setError('')
+
+    try {
+      await clearConversationHistory(conversationId)
+
+      setMessages([])
+      setConversations((previous) =>
+        previous.map((conversation) =>
+          getId(conversation) === conversationId
+            ? {
+                ...conversation,
+                lastMessage: null,
+                lastMessageText: '',
+                lastMessageAt: null,
+              }
+            : conversation,
+        ),
+      )
+
+      setNotice('History cleared for your account.')
+    } catch (requestError) {
+      setError(requestError.message || 'Could not clear this history.')
+    } finally {
+      setWorking(false)
+    }
+  }
+
+  async function handleCloseConversation() {
+    if (!activeId) return
+
+    const confirmed = window.confirm(
+      'Close this conversation? It will be hidden from your list until a new message arrives.',
+    )
+
+    if (!confirmed) return
+
+    const conversationId = activeId
+    setWorking(true)
+    setError('')
+
+    try {
+      await closeConversation(conversationId)
+
+      setConversations((previous) =>
+        previous.filter((item) => getId(item) !== conversationId),
+      )
+
+      setMessages([])
+      setActiveId('')
+      setNotice('Conversation closed.')
+    } catch (requestError) {
+      setError(requestError.message || 'Could not close this conversation.')
+    } finally {
+      setWorking(false)
     }
   }
 
@@ -402,6 +762,7 @@ export default function Messenger({ currentUser, onLogout }) {
     setError('')
 
     try {
+      disconnectSocket()
       await onLogout()
     } catch (requestError) {
       setError(requestError.message || 'Sign-out failed. Try again.')
@@ -517,22 +878,24 @@ export default function Messenger({ currentUser, onLogout }) {
                   type="button"
                   key={id}
                   onClick={() => {
+                    if (id !== activeId) {
+                      setLoadingMessages(true)
+                      setMessages([])
+                    }
+
                     setActiveId(id)
                     setError('')
                     setNotice('')
                   }}
                 >
-                  <span className="contact-avatar">
-                    {getInitials(name)}
-                  </span>
+                  <span className="contact-avatar">{getInitials(name)}</span>
 
                   <span className="conversation-item-content">
                     <span className="conversation-item-top">
                       <strong>{name}</strong>
                       <small>
                         {getTime(
-                          conversation.lastMessageAt ||
-                            conversation.updatedAt,
+                          conversation.lastMessageAt || conversation.updatedAt,
                         )}
                       </small>
                     </span>
@@ -620,10 +983,31 @@ export default function Messenger({ currentUser, onLogout }) {
                 </p>
               </div>
 
-              <span className="chat-header-badge">
-                <span />
-                ChatWave
-              </span>
+              <div
+                className="chat-header-actions"
+                style={{ display: 'flex', gap: '8px', marginLeft: 'auto' }}
+              >
+                <button
+                  className="icon-button"
+                  type="button"
+                  onClick={handleClearHistory}
+                  disabled={working}
+                  aria-label="Clear history for your account"
+                  title="Clear history for your account"
+                >
+                  <Icon name="trash" size={17} />
+                </button>
+                <button
+                  className="icon-button"
+                  type="button"
+                  onClick={handleCloseConversation}
+                  disabled={working}
+                  aria-label="Close conversation"
+                  title="Close conversation"
+                >
+                  <Icon name="close" size={17} />
+                </button>
+              </div>
             </header>
 
             {(error || notice) && (
@@ -658,8 +1042,13 @@ export default function Messenger({ currentUser, onLogout }) {
               ) : messages.length ? (
                 <div className="message-stack">
                   {messages.map((message) => {
-                    const mine =
-                      getId(message.sender) === currentUserId
+                    const mine = getId(message.sender) === currentUserId
+                    const readByOther = (message.readBy || []).some(
+                      (reader) => getId(reader) !== currentUserId,
+                    )
+                    const deliveredToOther = (
+                      message.deliveredTo || []
+                    ).some((reader) => getId(reader) !== currentUserId)
 
                     return (
                       <div
@@ -684,11 +1073,67 @@ export default function Messenger({ currentUser, onLogout }) {
                           <time className="message-time">
                             {getTime(message.createdAt)}
                             {mine ? ' · You' : ''}
+                            {message.editedAt ? ' · Edited' : ''}
+                            {mine && (
+                              <span className="message-delivery-status">
+                                {' · '}
+                                {readByOther
+                                  ? 'Seen'
+                                  : deliveredToOther
+                                    ? 'Delivered'
+                                    : 'Sent'}
+                              </span>
+                            )}
                           </time>
+
+                          {mine && (
+                            <div
+                              className="message-actions"
+                              style={{
+                                display: 'flex',
+                                gap: '8px',
+                                alignItems: 'center',
+                              }}
+                            >
+                              <button
+                                type="button"
+                                onClick={() => handleEditMessage(message)}
+                                style={{
+                                  border: 0,
+                                  padding: '2px 4px',
+                                  background: 'transparent',
+                                  color: 'var(--messenger-purple)',
+                                  cursor: 'pointer',
+                                  fontSize: '11px',
+                                  fontWeight: 700,
+                                }}
+                                aria-label="Edit message"
+                              >
+                                Edit
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteMessage(message)}
+                                style={{
+                                  border: 0,
+                                  padding: '2px 4px',
+                                  background: 'transparent',
+                                  color: '#c04458',
+                                  cursor: 'pointer',
+                                  fontSize: '11px',
+                                  fontWeight: 700,
+                                }}
+                                aria-label="Delete message"
+                              >
+                                Delete
+                              </button>
+                            </div>
+                          )}
                         </div>
                       </div>
                     )
                   })}
+
                   <div ref={bottomRef} />
                 </div>
               ) : (
@@ -756,9 +1201,12 @@ export default function Messenger({ currentUser, onLogout }) {
               Start a conversation
             </button>
 
-            {error && (
-              <div className="messenger-alert alert-error" role="alert">
-                {error}
+            {(error || notice) && (
+              <div
+                className={`messenger-alert ${error ? 'alert-error' : 'alert-success'}`}
+                role={error ? 'alert' : 'status'}
+              >
+                {error || notice}
               </div>
             )}
           </div>

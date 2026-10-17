@@ -23,6 +23,13 @@ const messageSchema = new mongoose.Schema(
       maxlength: 4000,
     },
 
+    deliveredTo: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User',
+      },
+    ],
+
     readBy: [
       {
         type: mongoose.Schema.Types.ObjectId,
@@ -46,6 +53,7 @@ const messageSchema = new mongoose.Schema(
 )
 
 messageSchema.index({ conversation: 1, createdAt: -1, _id: -1 })
+messageSchema.index({ conversation: 1, sender: 1, deletedAt: 1 })
 
 const Message =
   mongoose.models.Message || mongoose.model('Message', messageSchema)

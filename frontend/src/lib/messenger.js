@@ -12,7 +12,7 @@ export async function createConversation(userId) {
 }
 
 export async function getMessages(conversationId, options = {}) {
-  const { limit = 50, before } = options
+  const { limit = 40, before } = options
   const params = new URLSearchParams()
 
   params.set('limit', String(limit))
@@ -23,9 +23,7 @@ export async function getMessages(conversationId, options = {}) {
 
   const id = encodeURIComponent(conversationId)
 
-  return apiRequest(
-    `/conversations/${id}/messages?${params.toString()}`,
-  )
+  return apiRequest(`/conversations/${id}/messages?${params.toString()}`)
 }
 
 export async function sendMessage(conversationId, text) {
@@ -34,5 +32,48 @@ export async function sendMessage(conversationId, text) {
   return apiRequest(`/conversations/${id}/messages`, {
     method: 'POST',
     body: JSON.stringify({ text }),
+  })
+}
+
+export async function editMessage(conversationId, messageId, text) {
+  const conversation = encodeURIComponent(conversationId)
+  const message = encodeURIComponent(messageId)
+
+  return apiRequest(
+    `/conversations/${conversation}/messages/${message}`,
+    {
+      method: 'PATCH',
+      body: JSON.stringify({ text }),
+    },
+  )
+}
+
+export async function deleteMessage(conversationId, messageId) {
+  const conversation = encodeURIComponent(conversationId)
+  const message = encodeURIComponent(messageId)
+
+  return apiRequest(
+    `/conversations/${conversation}/messages/${message}`,
+    {
+      method: 'DELETE',
+    },
+  )
+}
+
+export async function closeConversation(conversationId) {
+  const id = encodeURIComponent(conversationId)
+
+  return apiRequest(`/conversations/${id}/close`, {
+    method: 'PATCH',
+    body: JSON.stringify({}),
+  })
+}
+
+export async function clearConversationHistory(conversationId) {
+  const id = encodeURIComponent(conversationId)
+
+  return apiRequest(`/conversations/${id}/clear-history`, {
+    method: 'PATCH',
+    body: JSON.stringify({}),
   })
 }

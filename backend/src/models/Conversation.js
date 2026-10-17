@@ -1,5 +1,24 @@
 import mongoose from 'mongoose'
 
+const conversationUserSettingsSchema = new mongoose.Schema(
+  {
+    user: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      required: true,
+    },
+    hidden: {
+      type: Boolean,
+      default: false,
+    },
+    clearedAt: {
+      type: Date,
+      default: null,
+    },
+  },
+  { _id: false },
+)
+
 const conversationSchema = new mongoose.Schema(
   {
     participants: {
@@ -57,6 +76,12 @@ const conversationSchema = new mongoose.Schema(
       type: Date,
       default: Date.now,
     },
+
+    // Each participant controls their own history and hidden state.
+    userSettings: {
+      type: [conversationUserSettingsSchema],
+      default: [],
+    },
   },
   {
     timestamps: true,
@@ -65,6 +90,7 @@ const conversationSchema = new mongoose.Schema(
 
 conversationSchema.index({ participants: 1, lastMessageAt: -1 })
 conversationSchema.index({ lastMessageAt: -1 })
+conversationSchema.index({ participants: 1, isGroup: 1 })
 
 const Conversation =
   mongoose.models.Conversation ||

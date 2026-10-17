@@ -1,3 +1,4 @@
+
 import User from '../models/User.js'
 import {
   comparePassword,
@@ -24,13 +25,13 @@ function sendError(res, error, status = 400) {
   })
 }
 
-function setLoginCookie(res, user) {
-  const token = createAuthToken(user)
+function setLoginCookie(res, user, rememberMe = false) {
+  const token = createAuthToken(user, rememberMe)
 
   res.cookie(
     getAuthCookieName(),
     token,
-    getAuthCookieOptions(),
+    getAuthCookieOptions(rememberMe),
   )
 }
 
@@ -176,6 +177,7 @@ export async function login(req, res, next) {
         : ''
 
     const { password } = req.body || {}
+    const rememberMe = req.body?.rememberMe === true
 
     if (!identity || typeof password !== 'string' || !password) {
       return res.status(400).json({
@@ -204,7 +206,7 @@ export async function login(req, res, next) {
       })
     }
 
-    setLoginCookie(res, user)
+    setLoginCookie(res, user, rememberMe)
 
     return res.status(200).json({
       message: 'Login successful.',

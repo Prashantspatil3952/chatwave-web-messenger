@@ -1,3 +1,4 @@
+
 import { apiRequest } from './api.js'
 
 function post(path, data) {
@@ -7,8 +8,16 @@ function post(path, data) {
   })
 }
 
-export function loginAccount({ identity, password }) {
-  return post('/auth/login', { identity, password })
+export function loginAccount({
+  identity,
+  password,
+  rememberMe = false,
+}) {
+  return post('/auth/login', {
+    identity,
+    password,
+    rememberMe,
+  })
 }
 
 export function requestRegistrationOtp(email) {

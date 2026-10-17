@@ -1,14 +1,13 @@
 import { io } from 'socket.io-client'
 
-const SOCKET_URL =
-  import.meta.env.VITE_SOCKET_URL || 'http://localhost:5000'
+const SOCKET_URL = (
+  import.meta.env.VITE_SOCKET_URL ||
+  import.meta.env.VITE_API_URL?.replace(/\/api\/?$/, '') ||
+  'http://localhost:5000'
+).replace(/\/$/, '')
 
 let socket = null
 
-/**
- * Create or return the shared Socket.IO client.
- * The socket connects only when connectSocket() is called.
- */
 export function getSocket() {
   if (!socket) {
     socket = io(SOCKET_URL, {
@@ -24,9 +23,6 @@ export function getSocket() {
   return socket
 }
 
-/**
- * Connect to the backend Socket.IO server.
- */
 export function connectSocket() {
   const client = getSocket()
 
@@ -37,18 +33,12 @@ export function connectSocket() {
   return client
 }
 
-/**
- * Disconnect the shared socket connection.
- */
 export function disconnectSocket() {
   if (socket) {
     socket.disconnect()
   }
 }
 
-/**
- * Check whether the socket is currently connected.
- */
 export function isSocketConnected() {
   return Boolean(socket?.connected)
 }

@@ -1,50 +1,21 @@
+
 import crypto from 'node:crypto'
 import bcrypt from 'bcryptjs'
 
+// A password only needs six characters.
+// No uppercase, lowercase, number or special character rules.
 export function validatePassword(password) {
-  if (typeof password !== 'string') {
+  if (typeof password !== 'string' || password.length < 6) {
     return {
       valid: false,
-      message: 'Password is required.',
+      message: 'Password must contain at least 6 characters.',
     }
   }
 
-  if (password.length < 8) {
-    return {
-      valid: false,
-      message: 'Password must contain at least 8 characters.',
-    }
+  return {
+    valid: true,
+    message: 'Password is valid.',
   }
-
-  if (!/[A-Z]/.test(password)) {
-    return {
-      valid: false,
-      message: 'Password must contain at least one uppercase letter.',
-    }
-  }
-
-  if (!/[a-z]/.test(password)) {
-    return {
-      valid: false,
-      message: 'Password must contain at least one lowercase letter.',
-    }
-  }
-
-  if (!/[0-9]/.test(password)) {
-    return {
-      valid: false,
-      message: 'Password must contain at least one number.',
-    }
-  }
-
-  if (!/[^A-Za-z0-9]/.test(password)) {
-    return {
-      valid: false,
-      message: 'Password must contain at least one special character.',
-    }
-  }
-
-  return { valid: true, message: 'Password is valid.' }
 }
 
 export async function hashPassword(password) {
